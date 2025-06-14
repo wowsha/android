@@ -1,4 +1,4 @@
-name: Build Android 5 AOSP 64-bit ISO
+name: Build Android 5 AOSP 64-bit ISO 
 
 on:
   push:
