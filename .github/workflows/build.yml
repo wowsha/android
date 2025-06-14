@@ -11,10 +11,11 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y openjdk-8-jdk git repo bc bison build-essential \
-            curl flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses5-dev \
-            lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev \
+            curl flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses-dev \
+            lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev \
             libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop openjdk-8-jdk pngcrush \
             schedtool squashfs-tools xsltproc zip zlib1g-dev liblzma-dev
 
