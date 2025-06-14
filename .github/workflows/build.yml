@@ -32,10 +32,10 @@ jobs:
           cd aosp
           repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.0_r1 --depth=1
 
-      - name: Sync repo (shallow)
+      - name: Sync repo
         run: |
           cd aosp
-          repo sync -j2 --no-clone-bundle --no-tags --depth=1
+          repo sync -j2 --no-clone-bundle --no-tags
 
       - name: Setup build environment
         run: |
