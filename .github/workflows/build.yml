@@ -1,64 +1,54 @@
-name: Build AOSP Android 6.0.0_r1 ARM (Legacy Fixes)
+name: Build AOSP 6.0 on ubuntu-latest
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
-    timeout-minutes: 720
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Install dependencies
+      - name: Install legacy dependencies
         run: |
-          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y openjdk-7-jdk python2 git curl bc bison build-essential \
-            flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses-dev \
-            lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev \
-            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
-            schedtool squashfs-tools xsltproc zip zlib1g-dev liblzma-dev
+          sudo apt-get install -y software-properties-common curl wget unzip git gnupg flex bison gperf \
+            build-essential zip zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses-dev \
+            lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc fontconfig
+      
+          # Install Python 2
+          sudo add-apt-repository ppa:deadsnakes/ppa -y
+          sudo apt-get update
+          sudo apt-get install -y python2
+      
+          # Install OpenJDK 7 manually
+          wget https://github.com/AdoptOpenJDK/openjdk7-binaries/releases/download/jdk7u181-b01/OpenJDK7U-jdk_x64_linux_7u181b01.tar.gz
+          mkdir -p ~/java7
+          tar -xzf OpenJDK7U-jdk_x64_linux_7u181b01.tar.gz -C ~/java7 --strip-components=1
+          echo "JAVA_HOME=$HOME/java7" >> $GITHUB_ENV
+          echo "$HOME/java7/bin" >> $GITHUB_PATH
 
-          sudo ln -sf /usr/bin/python2 /usr/bin/python
-
-      - name: Set JAVA_HOME for Java 7
-        run: echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> $GITHUB_ENV
-
-      - name: Setup repo tool
+      - name: Install repo tool
         run: |
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
-          echo 'export PATH=~/bin:$PATH' >> $GITHUB_ENV
+          echo "$HOME/bin" >> $GITHUB_PATH
 
-      - name: Initialize AOSP repo
+      - name: Init AOSP 6.0 repo
         run: |
-          mkdir aosp
-          cd aosp
-          repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.0_r1 --depth=1
+          mkdir aosp && cd aosp
+          repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.1_r81
+          repo sync -j4
 
-      - name: Sync AOSP source
-        run: |
-          cd aosp
-          repo sync -j2 --no-clone-bundle --no-tags
-
-      - name: Set up build environment
+      - name: Build AOSP
         run: |
           cd aosp
-          export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
           source build/envsetup.sh
-          lunch aosp_arm-userdebug
+          lunch aosp_arm-eng
+          make -j$(nproc)
 
-      - name: Start build (limited threads)
-        run: |
-          cd aosp
-          export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
-          make -j2 sdk || true
-
-      - name: Upload build artifacts
+      - name: Upload output
         uses: actions/upload-artifact@v4
         with:
-          name: aosp-6.0.0_r1-sdk
-          path: aosp/out/target/product/generic/sdk/
+          name: android6-images
+          path: aosp/out/target/product/generic/*.img
