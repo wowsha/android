@@ -1,4 +1,4 @@
-name: Build Android 10 ARM
+name: Build Android 10 ARM (no Docker)
 
 on:
   workflow_dispatch:
@@ -8,13 +8,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install dependencies
+      - name: Install required packages and Python 2
         run: |
           sudo apt-get update
           sudo apt-get install -y openjdk-11-jdk git-core gnupg flex bison gperf \
             build-essential zip curl zlib1g-dev gcc-multilib g++-multilib \
-            libc6-dev-i386 libncurses5-dev libncurses5 x11proto-dev libx11-dev \
-            lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip python2
+            libc6-dev-i386 libncurses-dev x11proto-dev libx11-dev \
+            lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip \
+            python-is-python3 python2-minimal || true
+
+          # Manually install Python 2 if not available
+          if ! command -v python2 >/dev/null; then
+            curl -LO https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tgz
+            tar xzf Python-2.7.18.tgz
+            cd Python-2.7.18
+            ./configure --prefix=/usr/local
+            make -j$(nproc)
+            sudo make install
+            cd ..
+          fi
 
       - name: Set up environment
         run: |
@@ -29,7 +41,7 @@ jobs:
           sudo mv repo /usr/local/bin/
           repo init -u https://android.googlesource.com/platform/manifest -b android-10.0.0_r47
 
-      - name: Sync source (this takes time)
+      - name: Sync AOSP source (may take 30+ minutes)
         run: |
           cd aosp
           repo sync -c -j4
@@ -41,8 +53,8 @@ jobs:
           lunch aosp_arm-eng
           make -j$(nproc)
 
-      - name: Upload system image
+      - name: Upload images
         uses: actions/upload-artifact@v4
         with:
-          name: android10-arm-images
+          name: android10-arm-output
           path: aosp/out/target/product/generic/*.img
