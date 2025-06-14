@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # Adjust timeout as needed, AOSP build is slow
+    timeout-minutes: 240  # Adjust as needed
 
     steps:
     - name: Checkout source
@@ -19,7 +19,6 @@ jobs:
       run: |
         sudo mkdir /mnt/tmpfs
         sudo mount -t tmpfs -o size=100G tmpfs /mnt/tmpfs
-        # Confirm tmpfs mount
         df -h /mnt/tmpfs
 
     - name: Copy source to tmpfs
@@ -27,21 +26,15 @@ jobs:
         rsync -a --exclude='.git' ./ /mnt/tmpfs/aosp-src/
       shell: bash
 
-    - name: Set up build environment
+    - name: Install build dependencies
       run: |
+        sudo dpkg --add-architecture i386
         sudo apt-get update
-        sudo apt-get install -y openjdk-7-jdk bc bison build-essential curl \
-          flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev \
-          lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
-          libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
-          xsltproc zip zlib1g-dev
+        sudo apt-get install -y openjdk-8-jdk bc bison build-essential curl \
+          flex g++-multilib gcc-multilib git gnupg gperf lib32z1 lib32stdc++6 \
+          lib32gcc1 libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 \
+          libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
       shell: bash
-
-    - name: Initialize repo and sync (if repo is not local)
-      if: false  # assuming source is checked out, disable this step or configure if needed
-      run: |
-        repo init -u https://android.googlesource.com/platform/manifest -b android-5.1.1_rX
-        repo sync -c -j$(nproc) --no-clone-bundle --no-tags
 
     - name: Build AOSP x86_64
       run: |
@@ -54,17 +47,17 @@ jobs:
     - name: Create bootable ISO from build output
       run: |
         cd /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64
-        # Assuming there is a system.img, ramdisk.img, kernel, etc.
+
         mkdir iso_root
         cp -r * iso_root/
-        # Create a bootable ISO (example with grub2, adjust paths)
+
         mkdir -p iso_root/boot/grub
         cat > iso_root/boot/grub/grub.cfg <<EOF
-        menuentry "Android x86_64" {
-          linux /kernel quiet root=/dev/ram0 androidboot.hardware=android_x86_64
-          initrd /ramdisk.img
-        }
-        EOF
+menuentry "Android x86_64" {
+  linux /kernel quiet root=/dev/ram0 androidboot.hardware=android_x86_64
+  initrd /ramdisk.img
+}
+EOF
 
         grub-mkrescue -o android_x86_64.iso iso_root
       shell: bash
