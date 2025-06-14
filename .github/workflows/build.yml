@@ -1,11 +1,11 @@
-name: Build AOSP Android 6.0.0_r1 ARM (Demo on GitHub hosted)
+name: Build AOSP Android 6.0.0_r1 ARM (Legacy Fixes)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     timeout-minutes: 720
 
     steps:
@@ -13,14 +13,16 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y openjdk-8-jdk git repo bc bison build-essential \
-            curl flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses-dev \
+          sudo apt-get install -y openjdk-7-jdk python2 git curl bc bison build-essential \
+            flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses-dev \
             lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev \
             libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
             schedtool squashfs-tools xsltproc zip zlib1g-dev liblzma-dev
 
-      - name: Set JAVA_HOME
-        run: echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
+
+      - name: Set JAVA_HOME for Java 7
+        run: echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> $GITHUB_ENV
 
       - name: Setup repo tool
         run: |
@@ -29,34 +31,34 @@ jobs:
           chmod a+x ~/bin/repo
           echo 'export PATH=~/bin:$PATH' >> $GITHUB_ENV
 
-      - name: Initialize repo
+      - name: Initialize AOSP repo
         run: |
           mkdir aosp
           cd aosp
           repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.0_r1 --depth=1
 
-      - name: Sync repo
+      - name: Sync AOSP source
         run: |
           cd aosp
           repo sync -j2 --no-clone-bundle --no-tags
 
-      - name: Setup build environment
+      - name: Set up build environment
         run: |
           cd aosp
-          export JAVA_HOME=$JAVA_HOME
+          export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
           source build/envsetup.sh
           lunch aosp_arm-userdebug
 
-      - name: Attempt build (limited threads)
+      - name: Start build (limited threads)
         run: |
           cd aosp
-          export JAVA_HOME=$JAVA_HOME
+          export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
           make -j2 sdk || true
 
-      - name: Upload partial build artifacts (if any)
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: aosp-6.0.0_r1-arm-sdk-partial
-          path: aosp/out/target/product/generic_arm/sdk/*.img
+          name: aosp-6.0.0_r1-sdk
+          path: aosp/out/target/product/generic/sdk/
