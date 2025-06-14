@@ -1,4 +1,4 @@
-name: Build Android 5 AOSP 64-bit ISO 
+name: Build Android 5 AOSP 64-bit ISO
 
 on:
   push:
@@ -84,7 +84,7 @@ EOF
           -J -R iso_root
 
     - name: Upload ISO artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: android5_arm64.iso
         path: $TMP_DRIVE_MOUNT/android5_arm64.iso
