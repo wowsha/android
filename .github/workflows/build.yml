@@ -1,4 +1,4 @@
-name: Build Android-x86 Oreo 8.1 x86_64 ISO
+name: Build Android-x86 Marshmallow 6.0.0_r1 x86_64 ISO
 
 on:
   push:
@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android-x86-oreo:
+  build-android-x86-marshmallow:
     runs-on: ubuntu-latest
-    timeout-minutes: 200  # Adjust if needed
+    timeout-minutes: 180
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Setup 100GB tmpfs on /tmp
         run: |
@@ -26,10 +26,10 @@ jobs:
           sudo apt-get install -y openjdk-8-jdk git repo bc bison flex libssl-dev curl \
                                   libncurses5-dev lib32z1-dev libbz2-dev gcc-multilib g++-multilib
 
-      - name: Initialize repo for Android-x86 Oreo 8.1
+      - name: Initialize repo for Android-x86 Marshmallow 6.0.0_r1
         run: |
           cd /tmp
-          repo init -u https://github.com/android-x86/manifest.git -b android-8.1-r3
+          repo init -u https://github.com/android-x86/manifest.git -b android-6.0.0_r1
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Setup build environment and lunch target
@@ -38,20 +38,20 @@ jobs:
           source build/envsetup.sh
           lunch android_x86_64-userdebug
 
-      - name: Build Android-x86 Oreo ISO
+      - name: Build Android-x86 Marshmallow ISO
         run: |
           cd /tmp
           make iso_img -j$(nproc)
 
       - name: Copy ISO to workspace
         run: |
-          cp /tmp/out/target/product/x86_64/android_x86_64.iso $GITHUB_WORKSPACE/android_x86_oreo_8_1_x86_64.iso
+          cp /tmp/out/target/product/x86_64/android_x86_64.iso $GITHUB_WORKSPACE/android_x86_marshmallow_6_0_0_r1_x86_64.iso
 
       - name: Upload ISO artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: android-x86-oreo-8.1-x86_64-iso
-          path: android_x86_oreo_8_1_x86_64.iso
+          name: android-x86-marshmallow-6.0.0_r1-x86_64-iso
+          path: android_x86_marshmallow_6_0_0_r1_x86_64.iso
 
       - name: Unmount tmpfs from /tmp
         if: always()
