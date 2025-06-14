@@ -1,58 +1,48 @@
-name: Build Android-x86 Marshmallow 6.0.0_r1 x86_64 ISO
+name: Build Android 6.0 x86_64
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
-  build-android-x86-marshmallow:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 720  # max 12 hours, Android builds can be very slow
 
     steps:
-      - name: Setup 100GB tmpfs on /tmp
+      - name: Setup 100GB tmpfs
         run: |
           sudo mount -t tmpfs -o size=100G tmpfs /tmp
-          df -h /tmp
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-8-jdk git repo bc bison flex libssl-dev curl \
-                                  libncurses5-dev lib32z1-dev libbz2-dev gcc-multilib g++-multilib
+          sudo apt-get install -y openjdk-8-jdk repo git-core gnupg flex bison gperf \
+          build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 \
+          lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev
 
-      - name: Initialize repo for Android-x86 Marshmallow 6.0.0_r1 and patch URLs
+      - name: Initialize repo for Android 6.0.0_r1
         run: |
           cd /tmp
-          repo init -u https://github.com/android-x86/manifest.git -b android-6.0.0_r1
-          # Patch platform URLs to android-x86 forks to avoid 404 errors
-          sed -i 's|https://github.com/platform/|https://github.com/android-x86/platform-|g' .repo/manifests/default.xml
-          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+          repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.0_r1
 
-      - name: Setup build environment and lunch target
+      - name: Sync repo
+        run: |
+          cd /tmp
+          repo sync -c -j4 --no-clone-bundle --no-tags
+
+      - name: Setup build environment
         run: |
           cd /tmp
           source build/envsetup.sh
-          lunch android_x86_64-userdebug
+          lunch aosp_x86_64-eng
 
-      - name: Build Android-x86 Marshmallow ISO
+      - name: Build Android
         run: |
           cd /tmp
-          make iso_img -j$(nproc)
+          make -j$(nproc)
 
-      - name: Copy ISO to workspace
-        run: |
-          cp /tmp/out/target/product/x86_64/android_x86_64.iso $GITHUB_WORKSPACE/android_x86_marshmallow_6_0_0_r1_x86_64.iso
-
-      - name: Upload ISO artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: android-x86-marshmallow-6.0.0_r1-x86_64-iso
-          path: android_x86_marshmallow_6_0_0_r1_x86_64.iso
-
-      - name: Unmount tmpfs from /tmp
-        if: always()
-        run: |
-          sudo umount /tmp
+          name: android-6.0.0-x86_64-build
+          path: /tmp/out/target/product/generic_x86_64/*.iso
