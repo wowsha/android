@@ -12,62 +12,62 @@ jobs:
     timeout-minutes: 240  # Adjust as needed
 
     steps:
-    - name: Checkout source
-      uses: actions/checkout@v3
+      - name: Checkout source
+        uses: actions/checkout@v3
 
-    - name: Setup 100GB tmpfs for build
-      run: |
-        sudo mkdir /mnt/tmpfs
-        sudo mount -t tmpfs -o size=100G tmpfs /mnt/tmpfs
-        df -h /mnt/tmpfs
+      - name: Setup 100GB tmpfs for build
+        run: |
+          sudo mkdir /mnt/tmpfs
+          sudo mount -t tmpfs -o size=100G tmpfs /mnt/tmpfs
+          df -h /mnt/tmpfs
 
-    - name: Copy source to tmpfs
-      run: |
-        rsync -a --exclude='.git' ./ /mnt/tmpfs/aosp-src/
-      shell: bash
+      - name: Copy source to tmpfs
+        run: |
+          rsync -a --exclude='.git' ./ /mnt/tmpfs/aosp-src/
+        shell: bash
 
-    - name: Install build dependencies
-      run: |
-        sudo dpkg --add-architecture i386
-        sudo apt-get update
-        sudo apt-get install -y openjdk-8-jdk bc bison build-essential curl \
-          flex g++-multilib gcc-multilib git gnupg gperf lib32z1 lib32stdc++6 \
-          lib32gcc1 libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 \
-          libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
-      shell: bash
+      - name: Install build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y openjdk-8-jdk bc bison build-essential curl \
+            flex g++-multilib gcc-multilib git gnupg gperf lib32z1 lib32stdc++6 \
+            lib32gcc1 libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 \
+            libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev grub2-common
+        shell: bash
 
-    - name: Build AOSP x86_64
-      run: |
-        cd /mnt/tmpfs/aosp-src
-        source build/envsetup.sh
-        lunch full_x86_64-eng
-        make -j$(nproc)
-      shell: bash
+      - name: Build AOSP x86_64
+        run: |
+          cd /mnt/tmpfs/aosp-src
+          source build/envsetup.sh
+          lunch full_x86_64-eng
+          make -j$(nproc)
+        shell: bash
 
-    - name: Create bootable ISO from build output
-      run: |
-        cd /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64
+      - name: Create bootable ISO from build output
+        run: |
+          cd /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64
 
-        mkdir iso_root
-        cp -r * iso_root/
+          mkdir iso_root
+          cp -r * iso_root/
 
-        mkdir -p iso_root/boot/grub
-        cat > iso_root/boot/grub/grub.cfg <<EOF
+          mkdir -p iso_root/boot/grub
+          cat > iso_root/boot/grub/grub.cfg <<EOF
 menuentry "Android x86_64" {
-  linux /kernel quiet root=/dev/ram0 androidboot.hardware=android_x86_64
-  initrd /ramdisk.img
+    linux /kernel quiet root=/dev/ram0 androidboot.hardware=android_x86_64
+    initrd /ramdisk.img
 }
 EOF
 
-        grub-mkrescue -o android_x86_64.iso iso_root
-      shell: bash
+          grub-mkrescue -o android_x86_64.iso iso_root
+        shell: bash
 
-    - name: Upload ISO artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: android_x86_64.iso
-        path: /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64/android_x86_64.iso
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: android_x86_64.iso
+          path: /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64/android_x86_64.iso
 
-    - name: Cleanup tmpfs
-      if: always()
-      run: sudo umount /mnt/tmpfs
+      - name: Cleanup tmpfs
+        if: always()
+        run: sudo umount /mnt/tmpfs
