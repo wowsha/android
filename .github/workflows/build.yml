@@ -1,0 +1,84 @@
+name: Build AOSP ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-aosp-iso:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-core gnupg flex bison gperf build-essential \
+              zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 \
+              lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev \
+              ccache libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig \
+              python-is-python3 xorriso grub-pc-bin mtools
+      
+      - name: Prepare build dir
+        run: |
+          mkdir -p /mnt/workspace
+          echo "workspace=/mnt/workspace" >> $GITHUB_ENV
+
+      - name: Download repo tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Init AOSP source
+        working-directory: /mnt/workspace
+        run: |
+          repo init -u https://android.googlesource.com/platform/manifest -b android-13.0.0_r3
+
+      - name: Sync source (takes a while)
+        working-directory: /mnt/workspace
+        run: |
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+
+      - name: Build AOSP x86_64
+        working-directory: /mnt/workspace
+        run: |
+          source build/envsetup.sh
+          lunch aosp_x86_64-eng
+          make -j$(nproc)
+
+      - name: Create bootable ISO
+        working-directory: /mnt/workspace
+        run: |
+          mkdir -p iso/boot/grub
+          cp out/target/product/generic_x86_64/kernel iso/boot/vmlinuz
+          cp out/target/product/generic_x86_64/ramdisk.img iso/boot/initrd.img
+          cp out/target/product/generic_x86_64/system.img iso/system.img
+
+          cat <<EOF > iso/boot/grub/grub.cfg
+          set default=0
+          set timeout=5
+          menuentry "Android x86_64" {
+              linux /boot/vmlinuz root=/dev/ram0 androidboot.selinux=permissive quiet SRC=/ systemd.debug_shell=1
+              initrd /boot/initrd.img
+          }
+          EOF
+
+          xorriso -as mkisofs \
+            -iso-level 3 \
+            -o aosp_x86_64.iso \
+            -full-iso9660-filenames \
+            -volid "ANDROIDISO" \
+            -eltorito-boot boot/grub/i386-pc/eltorito.img \
+            -no-emul-boot -boot-load-size 4 -boot-info-table \
+            --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
+            -append_partition 2 0xEF iso/boot/grub/efi.img \
+            -partition_offset 16 \
+            -graft-points iso
+
+      - name: Upload bootable ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-x86_64.iso
+          path: /mnt/workspace/aosp_x86_64.iso
