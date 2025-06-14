@@ -1,4 +1,4 @@
-name: Build Android 5 AOSP 64-bit ISO
+name: Build Android 5 AOSP x86_64 ISO
 
 on:
   push:
@@ -7,90 +7,74 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-aosp:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 480
-
-    env:
-      TMP_DRIVE_SIZE_GB: 100
-      TMP_DRIVE_IMG: /tmp/tmpdrive.img
-      TMP_DRIVE_MOUNT: /tmp/tmpdrive
-      OUT_DIR: /tmp/tmpdrive/out
+    timeout-minutes: 240  # Adjust timeout as needed, AOSP build is slow
 
     steps:
-    - name: Prepare 100GB loop-mounted tmp drive
-      run: |
-        sudo mkdir -p $TMP_DRIVE_MOUNT
-        sudo fallocate -l ${TMP_DRIVE_SIZE_GB}G $TMP_DRIVE_IMG
-        sudo mkfs.ext4 $TMP_DRIVE_IMG
-        sudo mount -o loop $TMP_DRIVE_IMG $TMP_DRIVE_MOUNT
-        sudo chmod 777 $TMP_DRIVE_MOUNT
-        df -h $TMP_DRIVE_MOUNT
+    - name: Checkout source
+      uses: actions/checkout@v3
 
-    - name: Install build dependencies
+    - name: Setup 100GB tmpfs for build
+      run: |
+        sudo mkdir /mnt/tmpfs
+        sudo mount -t tmpfs -o size=100G tmpfs /mnt/tmpfs
+        # Confirm tmpfs mount
+        df -h /mnt/tmpfs
+
+    - name: Copy source to tmpfs
+      run: |
+        rsync -a --exclude='.git' ./ /mnt/tmpfs/aosp-src/
+      shell: bash
+
+    - name: Set up build environment
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-7-jdk repo bc bison build-essential curl \
+        sudo apt-get install -y openjdk-7-jdk bc bison build-essential curl \
           flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev \
-          lib32z1-dev libgl1-mesa-dev libxml2-utils lzop pngcrush schedtool \
-          squashfs-tools xsltproc zip zlib1g-dev isolinux syslinux-utils
+          lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
+          libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
+          xsltproc zip zlib1g-dev
+      shell: bash
 
-    - name: Setup repo tool
+    - name: Initialize repo and sync (if repo is not local)
+      if: false  # assuming source is checked out, disable this step or configure if needed
       run: |
-        curl https://storage.googleapis.com/git-repo-downloads/repo > repo
-        chmod a+x repo
-        sudo mv repo /usr/local/bin/
+        repo init -u https://android.googlesource.com/platform/manifest -b android-5.1.1_rX
+        repo sync -c -j$(nproc) --no-clone-bundle --no-tags
 
-    - name: Initialize AOSP repo (Android 5.1.1 - Lollipop)
+    - name: Build AOSP x86_64
       run: |
-        cd $TMP_DRIVE_MOUNT
-        repo init -u https://android.googlesource.com/platform/manifest -b android-5.1.1_r38
-
-    - name: Sync repo (this may take a long time)
-      run: |
-        cd $TMP_DRIVE_MOUNT
-        repo sync -j$(nproc)
-
-    - name: Setup build environment and build
-      run: |
-        cd $TMP_DRIVE_MOUNT
+        cd /mnt/tmpfs/aosp-src
         source build/envsetup.sh
-        lunch aosp_arm64-eng
+        lunch full_x86_64-eng
         make -j$(nproc)
+      shell: bash
 
-    - name: Create bootable ISO from images
+    - name: Create bootable ISO from build output
       run: |
-        cd $TMP_DRIVE_MOUNT
-        mkdir -p iso_root/isolinux
-        cp /usr/lib/ISOLINUX/isolinux.bin iso_root/isolinux/
-        cp /usr/lib/syslinux/modules/bios/ldlinux.c32 iso_root/isolinux/
+        cd /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64
+        # Assuming there is a system.img, ramdisk.img, kernel, etc.
+        mkdir iso_root
+        cp -r * iso_root/
+        # Create a bootable ISO (example with grub2, adjust paths)
+        mkdir -p iso_root/boot/grub
+        cat > iso_root/boot/grub/grub.cfg <<EOF
+        menuentry "Android x86_64" {
+          linux /kernel quiet root=/dev/ram0 androidboot.hardware=android_x86_64
+          initrd /ramdisk.img
+        }
+        EOF
 
-        # Copy Android boot/system images - adjust path if needed
-        cp out/target/product/generic_arm64/boot.img iso_root/
-        cp out/target/product/generic_arm64/system.img iso_root/
-
-        # Create isolinux.cfg to boot Android images
-        cat > iso_root/isolinux/isolinux.cfg <<EOF
-UI ldlinux.c32
-LABEL android
-  KERNEL boot.img
-  APPEND initrd=system.img
-EOF
-
-        mkisofs -o android5_arm64.iso \
-          -b isolinux/isolinux.bin \
-          -c isolinux/boot.cat \
-          -no-emul-boot -boot-load-size 4 -boot-info-table \
-          -J -R iso_root
+        grub-mkrescue -o android_x86_64.iso iso_root
+      shell: bash
 
     - name: Upload ISO artifact
       uses: actions/upload-artifact@v4
       with:
-        name: android5_arm64.iso
-        path: $TMP_DRIVE_MOUNT/android5_arm64.iso
+        name: android_x86_64.iso
+        path: /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64/android_x86_64.iso
 
-    - name: Cleanup tmp drive
+    - name: Cleanup tmpfs
       if: always()
-      run: |
-        sudo umount $TMP_DRIVE_MOUNT
-        sudo rm $TMP_DRIVE_IMG
+      run: sudo umount /mnt/tmpfs
