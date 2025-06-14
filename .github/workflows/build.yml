@@ -1,55 +1,61 @@
-name: Build AOSP 10 in /tmp
+name: Build AOSP Android 10
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-aosp:
+  build:
     runs-on: ubuntu-latest
-
     steps:
+      - name: Setup tmp workspace
+        run: |
+          mkdir -p /tmp/aosp
+          echo "TMP_DIR=/tmp/aosp" >> $GITHUB_ENV
+
       - name: Install dependencies
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y openjdk-8-jdk git curl python3 unzip bc bison build-essential \
             g++-multilib gcc-multilib libncurses5-dev libncurses5-dev:i386 \
             libssl-dev libxml2-utils lzop pngcrush rsync schedtool squashfs-tools \
             xsltproc zip zlib1g-dev liblz4-tool libzstd-dev
 
-      - name: Prepare /tmp build root
+      - name: Setup Java
         run: |
-          mkdir -p /tmp/aosp
-          echo "Using /tmp for AOSP source and build"
-          df -h /tmp
+          echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
+          echo "$JAVA_HOME/bin" >> $GITHUB_PATH
 
-      - name: Download and sync AOSP 10 into /tmp
+      - name: Install repo tool
         run: |
-          cd /tmp/aosp
-          curl https://storage.googleapis.com/git-repo-downloads/repo > repo
-          chmod +x repo
-          ./repo init -u https://android.googlesource.com/platform/manifest -b android-10.0.0_r1
-          ./repo sync -c -j2
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+          chmod a+x ~/repo
+          sudo mv ~/repo /usr/local/bin/repo
 
-      - name: Set up environment
+      - name: Initialize AOSP 10 source
+        working-directory: /tmp/aosp
         run: |
-          cd /tmp/aosp
-          export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+          repo init -u https://android.googlesource.com/platform/manifest -b android-10.0.0_r47
+
+      - name: Sync source (shallow)
+        working-directory: /tmp/aosp
+        run: |
+          repo sync -c --no-tags --no-clone-bundle -j$(nproc)
+
+      - name: Source build and lunch
+        working-directory: /tmp/aosp
+        run: |
           source build/envsetup.sh
-          lunch aosp_arm-eng
+          lunch aosp_arm-userdebug
 
-      - name: Build system image
+      - name: Build Android
+        working-directory: /tmp/aosp
         run: |
-          cd /tmp/aosp
-          export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-          make -j$(nproc) systemimage
+          make -j$(nproc)
 
-      - name: Export built images
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/out
-          cp /tmp/aosp/out/target/product/*/system.img $GITHUB_WORKSPACE/out/ || true
-
-      - name: Upload artifacts
+      - name: Upload out folder
         uses: actions/upload-artifact@v4
         with:
-          name: system-img
-          path: out/system.img
+          name: aosp-android10
+          path: /tmp/aosp/out/target/product/generic/
+
