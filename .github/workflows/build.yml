@@ -12,9 +12,6 @@ jobs:
     timeout-minutes: 180
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
       - name: Setup 100GB tmpfs on /tmp
         run: |
           sudo mount -t tmpfs -o size=100G tmpfs /tmp
@@ -26,10 +23,12 @@ jobs:
           sudo apt-get install -y openjdk-8-jdk git repo bc bison flex libssl-dev curl \
                                   libncurses5-dev lib32z1-dev libbz2-dev gcc-multilib g++-multilib
 
-      - name: Initialize repo for Android-x86 Marshmallow 6.0.0_r1
+      - name: Initialize repo for Android-x86 Marshmallow 6.0.0_r1 and patch URLs
         run: |
           cd /tmp
           repo init -u https://github.com/android-x86/manifest.git -b android-6.0.0_r1
+          # Patch platform URLs to android-x86 forks to avoid 404 errors
+          sed -i 's|https://github.com/platform/|https://github.com/android-x86/platform-|g' .repo/manifests/default.xml
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Setup build environment and lunch target
@@ -48,7 +47,7 @@ jobs:
           cp /tmp/out/target/product/x86_64/android_x86_64.iso $GITHUB_WORKSPACE/android_x86_marshmallow_6_0_0_r1_x86_64.iso
 
       - name: Upload ISO artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: android-x86-marshmallow-6.0.0_r1-x86_64-iso
           path: android_x86_marshmallow_6_0_0_r1_x86_64.iso
