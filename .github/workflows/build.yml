@@ -1,4 +1,4 @@
-name: Build Android 6.0 x86_64
+name: Android-x86 6.0 R1 x86_64 Build (GitHub-hosted demo)
 
 on:
   workflow_dispatch:
@@ -6,43 +6,49 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 720  # max 12 hours, Android builds can be very slow
+    timeout-minutes: 720
 
     steps:
-      - name: Setup 100GB tmpfs
-        run: |
-          sudo mount -t tmpfs -o size=100G tmpfs /tmp
-
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-8-jdk repo git-core gnupg flex bison gperf \
-          build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 \
-          lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev
+          sudo apt-get install -y openjdk-8-jdk git repo bc bison build-essential \
+            curl flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses5-dev \
+            lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev \
+            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop openjdk-8-jdk pngcrush \
+            schedtool squashfs-tools xsltproc zip zlib1g-dev liblzma-dev
 
-      - name: Initialize repo for Android 6.0.0_r1
+      - name: Setup repo tool
         run: |
-          cd /tmp
-          repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.0_r1
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo 'export PATH=~/bin:$PATH' >> $GITHUB_ENV
 
-      - name: Sync repo
+      - name: Initialize repo
         run: |
-          cd /tmp
-          repo sync -c -j4 --no-clone-bundle --no-tags
+          mkdir android-x86
+          cd android-x86
+          repo init -u https://github.com/android-x86/manifest.git -b android-6.0-r1 --depth=1
+
+      - name: Sync repo (shallow, fewer threads)
+        run: |
+          cd android-x86
+          repo sync -j2 --no-clone-bundle --no-tags --depth=1
 
       - name: Setup build environment
         run: |
-          cd /tmp
+          cd android-x86
           source build/envsetup.sh
-          lunch aosp_x86_64-eng
+          lunch android_x86_64-userdebug
 
-      - name: Build Android
+      - name: Attempt build (limited threads)
         run: |
-          cd /tmp
-          make -j$(nproc)
+          cd android-x86
+          make -j2 iso_img || true
 
-      - name: Upload build artifacts
+      - name: Upload partial build artifacts (if any)
         uses: actions/upload-artifact@v4
         with:
-          name: android-6.0.0-x86_64-build
-          path: /tmp/out/target/product/generic_x86_64/*.iso
+          name: android-x86-6.0-r1-x86_64-partial
+          path: android-x86/out/target/product/x86_64/*.iso
