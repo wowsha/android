@@ -1,4 +1,4 @@
-name: Build Android 5 AOSP x86_64 ISO
+name: Build Android Oreo Go x86_64 ISO
 
 on:
   push:
@@ -7,67 +7,53 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-android-oreo-go:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # Adjust as needed
+    timeout-minutes: 180  # 3 hours, adjust if needed
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
 
-      - name: Setup 100GB tmpfs for build
+      - name: Setup 100GB tmpfs on /tmp
         run: |
-          sudo mkdir /mnt/tmpfs
-          sudo mount -t tmpfs -o size=100G tmpfs /mnt/tmpfs
-          df -h /mnt/tmpfs
+          sudo mount -t tmpfs -o size=100G tmpfs /tmp
+          df -h /tmp
 
-      - name: Copy source to tmpfs
+      - name: Install dependencies
         run: |
-          rsync -a --exclude='.git' ./ /mnt/tmpfs/aosp-src/
-        shell: bash
-
-      - name: Install build dependencies
-        run: |
-          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y openjdk-8-jdk bc bison build-essential curl \
-            flex g++-multilib gcc-multilib git gnupg gperf lib32z1 lib32stdc++6 \
-            lib32gcc1 libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 \
-            libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev grub2-common
-        shell: bash
+          sudo apt-get install -y openjdk-8-jdk git repo bc bison flex libssl-dev curl \
+                                  libncurses5-dev lib32z1-dev libbz2-dev gcc-multilib g++-multilib
 
-      - name: Build AOSP x86_64
+      - name: Initialize repo for Android Oreo Go (x86_64)
         run: |
-          cd /mnt/tmpfs/aosp-src
+          cd /tmp
+          repo init -u https://github.com/android-x86/manifest.git -b android-8.1.0_r49
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+
+      - name: Setup environment and lunch for x86_64 Oreo Go
+        run: |
+          cd /tmp
           source build/envsetup.sh
-          lunch full_x86_64-eng
-          make -j$(nproc)
-        shell: bash
+          lunch android_x86_64-userdebug
 
-      - name: Create bootable ISO from build output
+      - name: Build Android Oreo Go ISO
         run: |
-          cd /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64
+          cd /tmp
+          make iso_img -j$(nproc)
 
-          mkdir iso_root
-          cp -r * iso_root/
-
-          mkdir -p iso_root/boot/grub
-          cat > iso_root/boot/grub/grub.cfg <<EOF
-menuentry "Android x86_64" {
-    linux /kernel quiet root=/dev/ram0 androidboot.hardware=android_x86_64
-    initrd /ramdisk.img
-}
-EOF
-
-          grub-mkrescue -o android_x86_64.iso iso_root
-        shell: bash
+      - name: Copy ISO to workspace
+        run: |
+          cp /tmp/out/target/product/x86_64/android_x86_64.iso $GITHUB_WORKSPACE/android_oreo_go_x86_64.iso
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v3
         with:
-          name: android_x86_64.iso
-          path: /mnt/tmpfs/aosp-src/out/target/product/generic_x86_64/android_x86_64.iso
+          name: android-oreo-go-x86_64-iso
+          path: android_oreo_go_x86_64.iso
 
-      - name: Cleanup tmpfs
+      - name: Unmount tmpfs from /tmp
         if: always()
-        run: sudo umount /mnt/tmpfs
+        run: |
+          sudo umount /tmp
