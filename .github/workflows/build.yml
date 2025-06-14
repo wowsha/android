@@ -1,4 +1,4 @@
-name: Build AOSP 6.0 on ubuntu-latest
+name: Build Android 10 ARM
 
 on:
   workflow_dispatch:
@@ -8,47 +8,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install legacy dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y software-properties-common curl wget unzip git gnupg flex bison gperf \
-            build-essential zip zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses-dev \
-            lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc fontconfig
-      
-          # Install Python 2
-          sudo add-apt-repository ppa:deadsnakes/ppa -y
-          sudo apt-get update
-          sudo apt-get install -y python2
-      
-          # Install OpenJDK 7 manually
-          wget https://github.com/AdoptOpenJDK/openjdk7-binaries/releases/download/jdk7u181-b01/OpenJDK7U-jdk_x64_linux_7u181b01.tar.gz
-          mkdir -p ~/java7
-          tar -xzf OpenJDK7U-jdk_x64_linux_7u181b01.tar.gz -C ~/java7 --strip-components=1
-          echo "JAVA_HOME=$HOME/java7" >> $GITHUB_ENV
-          echo "$HOME/java7/bin" >> $GITHUB_PATH
+          sudo apt-get install -y openjdk-11-jdk git-core gnupg flex bison gperf \
+            build-essential zip curl zlib1g-dev gcc-multilib g++-multilib \
+            libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev \
+            lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip
 
-      - name: Install repo tool
+      - name: Set up environment
         run: |
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          echo "$HOME/bin" >> $GITHUB_PATH
+          echo 'JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64' >> $GITHUB_ENV
+          echo "$JAVA_HOME/bin" >> $GITHUB_PATH
 
-      - name: Init AOSP 6.0 repo
+      - name: Initialize AOSP repo
         run: |
           mkdir aosp && cd aosp
-          repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.1_r81
-          repo sync -j4
+          curl https://storage.googleapis.com/git-repo-downloads/repo > repo
+          chmod +x repo
+          sudo mv repo /usr/local/bin/
+          repo init -u https://android.googlesource.com/platform/manifest -b android-10.0.0_r47
 
-      - name: Build AOSP
+      - name: Sync source (this takes time)
+        run: |
+          cd aosp
+          repo sync -c -j4
+
+      - name: Build AOSP for ARM
         run: |
           cd aosp
           source build/envsetup.sh
           lunch aosp_arm-eng
           make -j$(nproc)
 
-      - name: Upload output
+      - name: Upload system image
         uses: actions/upload-artifact@v4
         with:
-          name: android6-images
+          name: android10-arm-images
           path: aosp/out/target/product/generic/*.img
