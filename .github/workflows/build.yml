@@ -16,8 +16,11 @@ jobs:
           sudo apt-get install -y openjdk-8-jdk git repo bc bison build-essential \
             curl flex g++-multilib gcc-multilib git-core gnupg gperf lib32ncurses-dev \
             lib32readline-dev lib32z1-dev liblz4-tool libncurses-dev \
-            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop openjdk-8-jdk pngcrush \
+            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
             schedtool squashfs-tools xsltproc zip zlib1g-dev liblzma-dev
+
+      - name: Set JAVA_HOME
+        run: echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
 
       - name: Setup repo tool
         run: |
@@ -40,12 +43,16 @@ jobs:
       - name: Setup build environment
         run: |
           cd aosp
+          export JAVA_HOME=$JAVA_HOME
+          export PATH=$JAVA_HOME/bin:$PATH
           source build/envsetup.sh
           lunch aosp_arm-userdebug
 
       - name: Attempt build (limited threads)
         run: |
           cd aosp
+          export JAVA_HOME=$JAVA_HOME
+          export PATH=$JAVA_HOME/bin:$PATH
           make -j2 sdk || true
 
       - name: Upload partial build artifacts (if any)
