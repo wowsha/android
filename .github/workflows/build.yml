@@ -21,10 +21,10 @@ jobs:
               ccache libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig \
               python-is-python3 xorriso grub-pc-bin mtools
 
-      - name: Prepare build dir
+      - name: Prepare temp build dir
         run: |
-          mkdir -p ${HOME}/workspace
-          echo "workspace=${HOME}/workspace" >> $GITHUB_ENV
+          mkdir -p /tmp/workspace
+          echo "workspace=/tmp/workspace" >> $GITHUB_ENV
 
       - name: Download repo tool
         run: |
@@ -38,7 +38,7 @@ jobs:
         run: |
           repo init -u https://android.googlesource.com/platform/manifest -b android-13.0.0_r3
 
-      - name: Sync source (takes time)
+      - name: Sync source (takes a while)
         working-directory: ${{ env.workspace }}
         run: |
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
@@ -73,4 +73,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-x86_64.iso
-          path: ${{ env.workspace }}/aosp_x86_64.iso
+          path: /tmp/workspace/aosp_x86_64.iso
